@@ -15,7 +15,7 @@ export const registerValidator = [
         .isString().withMessage("Password must be a string")
         .trim()
         .isLength({min: 6 }).withMessage("Password length must be between 6"),
-    (req,res),next => {
+    (req,res,next) => {
         const errors = validationResult(req)
 
         if(!errors.isEmpty()){
@@ -27,4 +27,29 @@ export const registerValidator = [
         next()
     }
         
+]
+
+export const loginValidator = [
+    body("email")
+        .exists().withMessage("Email is Required").bail()
+        .isString().withMessage("Email must be a String vaalue").bail()
+        .trim()
+        .isEmail().withMessage("Enter a valid email address"),
+    body("password")
+        .exists().withMessage("Password is Required").bail()
+        .isString().withMessage("Password must be a String value").bail()
+        .trim()
+        .isLength({ min: 6}).withMessage("Password at least 6 Character long"),
+
+    (req,res,next)=> {
+        const errors = validationResult(req)
+
+        if(!errors.isEmpty()){
+            return res.status(400).json({
+                message:"Invalid data",
+                errors: errors.array()
+            })
+        }
+        next()
+    }
 ]

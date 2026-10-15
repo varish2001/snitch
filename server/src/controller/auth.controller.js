@@ -1,6 +1,6 @@
 import userModel from "../models/user.model.js"
 import bcryptjs from "bcryptjs"
-import { createAccessToken, createRefreshToken } from "../utils/auth.utils.js"
+import { createAccessToken, createRefreshToken, readRefreshToken} from "../utils/auth.utils.js"
 
 export async function register(req,res){
     const { email, name, password } = req.body
@@ -37,4 +37,162 @@ export async function register(req,res){
         userId: user._id,
         role: user.role
     })
+
+    res.cookie("refreshToken", refreshToken, {
+        httpOnly: true
+    })
+    //refresh token ko cookie ma store kara diya hai, access token ko response ma bhej diya hai
+
+    await userModel.findByIdAndUpdate(user._id, {
+        refreshToken
+    })
+
+
+    res.status(201).json({
+        message:"User Registered Successsfully",
+        data: {
+            user:{
+                user: {
+                    email: user.email,
+                    name: user.name,
+                    role: user.role
+                },
+                accessToken // context api or redux ma store kara dinge
+                }
+            }
+        
+    })
 }
+
+export async function login(req,res) {
+    const { email, password } = req.body
+
+    const user = await userModel.findOne({
+        email
+    })
+
+    if(!user){
+        return res.status(400).json({
+            message:"Invalid email or password"
+        })    
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash)
+
+    if(!isPasswordValid){
+        return res.status(400).json({
+            message:"Invalid email or password"
+        })    
+    }
+
+    const accessToken = createAccessToken({
+        userId: user._id,
+        role: user.role
+    })
+    const refreshToken = createRefreshToken({
+        userId: user._id,
+        role: user.role
+    })
+
+    await userModel.findOneAndUpdate({
+        email
+    },{
+        refreshToken
+    })
+
+    res.cookie("refreshToken", refreshToken, {
+        httpOnly: true
+    })
+
+    res.status(200).json({
+        message:"user LoggedIn successfully",
+        data: {
+            user: {
+                id: user._id,
+                email:user.email,
+                name:user.name
+            },
+            accessToken
+        }
+    })
+}
+
+export async function refresh(req,res){
+    const refreshToken = req.cookies.refreshToken
+
+    if(!refreshToken){
+
+        return res.status(401).json({
+            message:"Refresh token is required"
+        })
+    }   
+    try {
+        const decoded = readRefreshToken(refreshToken)
+        const { userId, role } = decoded
+
+        const user = await userModel.finById(userId)
+
+        if(!refreshTOken != user.refreshToken){
+            await userModel.findByIdAndUpdate(user._id, {
+                refreshToken: null,
+                // isAccountFreeze:true
+            })
+
+            return res.status(401).json({
+                message:"Refresh token mismatch"
+            })
+        }
+
+        const accessToken = createAccessToken({
+            userId, role
+        })
+
+        const newRefreshToken = createRefreshToken({
+            userId, role
+        })
+
+        await userModel.findByAndIdUpdate(user._id, {
+            refreshToken: newRefreshToken
+        })
+
+        res.cookie("refreshToken", newRefreshToken, {
+            httpOnly: true
+        })
+
+        res.status(200).json({
+            message: "Token rotated successfully",
+            data: {
+                user: {
+                    email: user.email,
+                    name: user.name,
+                    id: user._id
+                },
+                accessToken
+            }
+        })
+        
+    } catch (error) {
+        return res.status(401).json({
+            message:"Invalid Refresh Token"
+        })
+    }                                                                        
+}
+
+export async function getMe(req,res){
+
+    const { userId, role} = req.user
+
+    const user = await userModel.findById(userId)
+
+    res.status(200).json({
+        message:"User data fetch successfully",
+        data:{
+            user:{
+                email: user.email,
+                name: user.name,
+                id: user._id
+            }
+        }
+    })
+
+} 
